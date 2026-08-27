@@ -104,3 +104,12 @@ def test_export_csv(tmp_path):
     assert "city,temp" in content
     assert "Tokyo,22.0" in content
     assert "Paris,25.0" in content
+
+
+def test_storage_custom_env_var(tmp_path, monkeypatch):
+    custom_file = tmp_path / "custom_env_storage.json"
+    monkeypatch.setenv("CLIMA_STORAGE_PATH", str(custom_file))
+
+    storage = StorageManager()
+    assert storage.file_path == custom_file
+    assert custom_file.exists()

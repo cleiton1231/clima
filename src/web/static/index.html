@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clima Países — Dashboard de Capitais Mundiais</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a', 700: '#15803d' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <span class="text-3xl">🌤️</span>
+        <div>
+          <h1 class="font-bold text-lg text-white leading-tight">Clima Países</h1>
+          <p class="text-xs text-slate-400">Capitais Mundiais • Open-Meteo & REST Countries</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a href="/docs" target="_blank" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1.5 border border-slate-700">
+          <span>⚡ API Docs</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
+
+    <!-- Search Section -->
+    <section class="max-w-2xl mx-auto text-center space-y-4">
+      <h2 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+        Descubra o clima em qualquer capital
+      </h2>
+      <p class="text-slate-400 text-sm">
+        Digite o nome de uma capital, país ou código ISO (ex: <span class="text-brand-500 font-medium">Brasília</span>, <span class="text-brand-500 font-medium">Tóquio</span>, <span class="text-brand-500 font-medium">Alemanha</span>, <span class="text-brand-500 font-medium">US</span>).
+      </p>
+
+      <form id="searchForm" class="relative flex items-center shadow-2xl rounded-2xl overflow-hidden border border-slate-700 bg-slate-900 focus-within:border-brand-500 transition">
+        <input 
+          type="text" 
+          id="cityInput" 
+          placeholder="Ex: Tóquio, Paris, Roma, Brasil..."
+          class="w-full px-5 py-4 bg-transparent text-white placeholder-slate-500 focus:outline-none text-base"
+          required
+        />
+        <button 
+          type="submit" 
+          id="searchBtn"
+          class="px-6 py-4 bg-brand-600 hover:bg-brand-500 text-white font-semibold transition flex items-center gap-2"
+        >
+          <span>Buscar</span>
+          <span id="spinner" class="hidden animate-spin">⏳</span>
+        </button>
+      </form>
+
+      <!-- Quick Chips -->
+      <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+        <span class="text-xs text-slate-500">Sugestões rápidas:</span>
+        <button onclick="quickSearch('Brasília')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇧🇷 Brasília</button>
+        <button onclick="quickSearch('Tóquio')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇯🇵 Tóquio</button>
+        <button onclick="quickSearch('Paris')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇫🇷 Paris</button>
+        <button onclick="quickSearch('Londres')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇬🇧 Londres</button>
+        <button onclick="quickSearch('Roma')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇮🇹 Roma</button>
+        <button onclick="quickSearch('Washington, D.C.')" class="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition">🇺🇸 Washington</button>
+      </div>
+    </section>
+
+    <!-- Error Alert -->
+    <div id="errorAlert" class="hidden max-w-2xl mx-auto p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-200 text-sm flex items-center gap-3">
+      <span class="text-xl">⚠️</span>
+      <span id="errorMessage">Capital não encontrada.</span>
+    </div>
+
+    <!-- Weather Content Container -->
+    <div id="weatherContent" class="hidden space-y-6">
+
+      <!-- Current Weather Hero Card -->
+      <div class="glass rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 relative overflow-hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div class="space-y-2">
+            <div class="flex items-center gap-3">
+              <span id="flagEmoji" class="text-4xl">🏳️</span>
+              <div>
+                <h3 id="capitalTitle" class="text-3xl font-bold text-white tracking-tight">Brasília</h3>
+                <p id="countrySubtitle" class="text-slate-400 text-sm">Brasil (BR) • América do Sul</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+              <span id="weatherEmoji" class="text-3xl">☀️</span>
+              <span id="weatherDesc" class="text-xl font-medium text-slate-200">Céu Limpo</span>
+            </div>
+          </div>
+
+          <!-- Temperature Badge -->
+          <div class="flex flex-col md:items-end">
+            <div class="text-5xl sm:text-6xl font-black text-amber-400 tracking-tighter" id="currentTemp">
+              28.0°C
+            </div>
+            <p class="text-slate-400 text-xs mt-1">Sensação térmica: <span id="apparentTemp" class="text-slate-200 font-semibold">27.5°C</span></p>
+            <p class="text-slate-500 text-xs" id="localTime">Fuso: America/Sao_Paulo (16:00)</p>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-800/80">
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/50">
+            <span class="text-xs text-slate-400 block mb-1">💧 Umidade</span>
+            <span id="humidityVal" class="text-lg font-bold text-cyan-400">35%</span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/50">
+            <span class="text-xs text-slate-400 block mb-1">💨 Vento</span>
+            <span id="windVal" class="text-lg font-bold text-blue-400">3.8 km/h</span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/50">
+            <span class="text-xs text-slate-400 block mb-1">🌧️ Precipitação</span>
+            <span id="precipVal" class="text-lg font-bold text-indigo-400">0.0 mm</span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/50">
+            <span class="text-xs text-slate-400 block mb-1">📍 Coordenadas</span>
+            <span id="coordsVal" class="text-xs font-semibold text-slate-300 block truncate">-15.78, -47.93</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Air Quality Card -->
+      <div id="aqiCard" class="glass rounded-3xl p-6 border border-slate-800 shadow-xl">
+        <h4 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
+          <span>🍃</span>
+          <span>Qualidade do Ar (European AQI)</span>
+        </h4>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="aqiGrid">
+          <!-- Dinâmico via JS -->
+        </div>
+      </div>
+
+      <!-- 5-Day Forecast Grid -->
+      <div class="glass rounded-3xl p-6 border border-slate-800 shadow-xl">
+        <h4 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
+          <span>📅</span>
+          <span>Previsão para os Próximos 5 Dias</span>
+        </h4>
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-4" id="forecastGrid">
+          <!-- Preenchido dinamicamente via JS -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500 bg-slate-950">
+    <p>Clima Países • Dados fornecidos por <a href="https://open-meteo.com" target="_blank" class="underline hover:text-slate-300">Open-Meteo</a> e <a href="https://restcountries.com" target="_blank" class="underline hover:text-slate-300">REST Countries</a></p>
+  </footer>
+
+  <script>
+    const form = document.getElementById('searchForm');
+    const input = document.getElementById('cityInput');
+    const spinner = document.getElementById('spinner');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const weatherContent = document.getElementById('weatherContent');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) fetchWeather(q);
+    });
+
+    function quickSearch(city) {
+      input.value = city;
+      fetchWeather(city);
+    }
+
+    async function fetchWeather(query) {
+      spinner.classList.remove('hidden');
+      errorAlert.classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/forecast/${encodeURIComponent(query)}`);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Erro ao consultar clima.');
+        }
+        const data = await res.json();
+        renderData(data);
+      } catch (err) {
+        weatherContent.classList.add('hidden');
+        errorMessage.innerText = err.message;
+        errorAlert.classList.remove('hidden');
+      } finally {
+        spinner.classList.add('hidden');
+      }
+    }
+
+    function renderData(data) {
+      const c = data.country;
+      const w = data.current;
+
+      document.getElementById('flagEmoji').innerText = c.flag_emoji || '🌐';
+      document.getElementById('capitalTitle').innerText = data.capital;
+      document.getElementById('countrySubtitle').innerText = `${c.name_pt} (${c.cca2}) • ${c.region}`;
+      document.getElementById('weatherEmoji').innerText = w.weather_emoji;
+      document.getElementById('weatherDesc').innerText = w.weather_description;
+      document.getElementById('currentTemp').innerText = `${w.temperature.toFixed(1)}°C`;
+      document.getElementById('apparentTemp').innerText = `${w.apparent_temperature.toFixed(1)}°C`;
+      document.getElementById('localTime').innerText = `Fuso: ${w.timezone} (${w.time})`;
+      document.getElementById('humidityVal').innerText = `${w.relative_humidity}%`;
+      document.getElementById('windVal').innerText = `${w.wind_speed.toFixed(1)} km/h`;
+      document.getElementById('precipVal').innerText = `${w.precipitation.toFixed(1)} mm`;
+      document.getElementById('coordsVal').innerText = `${w.latitude.toFixed(2)}, ${w.longitude.toFixed(2)}`;
+
+      // Qualidade do ar
+      const aqiGrid = document.getElementById('aqiGrid');
+      if (data.air_quality) {
+        const aq = data.air_quality;
+        aqiGrid.innerHTML = `
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400 block">Índice AQI</span>
+            <span class="text-base font-bold text-white">${aq.aqi_emoji} ${aq.european_aqi} (${aq.aqi_level})</span>
+          </div>
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400 block">PM2.5</span>
+            <span class="text-base font-bold text-slate-200">${aq.pm2_5.toFixed(1)} µg/m³</span>
+          </div>
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400 block">PM10</span>
+            <span class="text-base font-bold text-slate-200">${aq.pm10.toFixed(1)} µg/m³</span>
+          </div>
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400 block">NO₂</span>
+            <span class="text-base font-bold text-slate-200">${aq.nitrogen_dioxide.toFixed(1)} µg/m³</span>
+          </div>
+          <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+            <span class="text-xs text-slate-400 block">O₃</span>
+            <span class="text-base font-bold text-slate-200">${aq.ozone.toFixed(1)} µg/m³</span>
+          </div>
+        `;
+        document.getElementById('aqiCard').classList.remove('hidden');
+      } else {
+        document.getElementById('aqiCard').classList.add('hidden');
+      }
+
+      // Previsão 5 dias
+      const fGrid = document.getElementById('forecastGrid');
+      fGrid.innerHTML = '';
+      (data.daily || []).forEach(d => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/70 p-4 rounded-2xl border border-slate-800 flex flex-col items-center text-center space-y-2';
+        card.innerHTML = `
+          <span class="text-xs font-semibold text-slate-400">${d.date.split('-').slice(1).join('/')}</span>
+          <span class="text-3xl">${d.weather_emoji}</span>
+          <span class="text-xs text-slate-300 font-medium truncate w-full">${d.weather_description}</span>
+          <div class="pt-2 text-sm font-bold">
+            <span class="text-cyan-400">${d.temp_min.toFixed(0)}°</span>
+            <span class="text-slate-500 mx-1">/</span>
+            <span class="text-amber-400">${d.temp_max.toFixed(0)}°</span>
+          </div>
+          <span class="text-[11px] text-blue-400">🌧️ ${d.precipitation_probability_max}%</span>
+        `;
+        fGrid.appendChild(card);
+      });
+
+      weatherContent.classList.remove('hidden');
+    }
+
+    // Carrega busca padrão ao iniciar
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchWeather('Brasília');
+    });
+  </script>
+</body>
+</html>

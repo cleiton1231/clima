@@ -4,6 +4,7 @@ Responsabilidade:
 - Armazenar histórico local de consultas recentes em formato JSON.
 - Gerenciar capitais favoritas do usuário.
 - Exportar relatórios climáticos em JSON e planilhas CSV.
+- Respeitar a variável de ambiente CLIMA_STORAGE_PATH para isolamento de dados no container.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -41,8 +43,13 @@ class CustomJSONEncoder(json.JSONEncoder):
 class StorageManager:
     """Gerenciador de armazenamento local para histórico e favoritos."""
 
-    def __init__(self, file_path: Path = DEFAULT_STORAGE_FILE):
-        self.file_path = file_path
+    def __init__(self, file_path: Path | None = None):
+        if file_path is not None:
+            self.file_path = Path(file_path)
+        elif "CLIMA_STORAGE_PATH" in os.environ and os.environ["CLIMA_STORAGE_PATH"]:
+            self.file_path = Path(os.environ["CLIMA_STORAGE_PATH"])
+        else:
+            self.file_path = DEFAULT_STORAGE_FILE
         self._ensure_storage_file()
 
     def _ensure_storage_file(self) -> None:
