@@ -1,12 +1,10 @@
-"""Ponto de entrada do dashboard/CLI de clima para capitais do mundo.
+"""Ponto de entrada principal e Interface de Linha de Comando (CLI) para o Clima Países.
 
 Responsabilidade:
-- Orquestrar o fluxo principal: receber entrada do usuário (argumentos ou interativo),
-  resolver o matching da capital/país com normalização/fallback difuso,
-  consultar REST Countries e Open-Meteo, e exibir as informações de clima
-  de forma visual, clara e amigável.
-- Suporte a previsão estendida de 5 dias, previsão horária de 24h, qualidade do ar,
-  comparador entre múltiplas capitais, favoritos, histórico e exportação JSON/CSV.
+- Analisar argumentos de linha de comando (flags, subcomandos e queries).
+- Prover menu interativo navegável via terminal.
+- Orquestrar CityMatcher, OpenMeteoClient, HistoricalWeatherClient e StorageManager.
+- Formatar saídas ricas via módulo views.
 """
 
 from __future__ import annotations
@@ -14,21 +12,8 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
-# Garante que a raiz do projeto esteja no sys.path para execução direta ou como módulo
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.prompt import Prompt
-    HAS_RICH = True
-except ImportError:
-    HAS_RICH = False
-
+from src.api.historical import HistoricalWeatherClient
 from src.api.open_meteo import OpenMeteoClient
 from src.api.rest_countries import RestCountriesClient
 from src.comparator import compare_cities
@@ -38,14 +23,23 @@ from src.ui.views import (
     render_24h_hourly,
     render_5day_forecast,
     render_air_quality,
-    render_comparison_matrix,
+    render_comparison,
     render_current_weather,
     render_extended_dashboard,
     render_favorites,
+    render_historical_analysis,
     render_history,
 )
 
-console = Console() if HAS_RICH else None
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+    HAS_RICH = True
+    console = Console()
+except ImportError:
+    HAS_RICH = False
+    console = None
 
 
 def execute_city_query(
@@ -56,6 +50,7 @@ def execute_city_query(
     show_forecast: bool = False,
     show_hourly: bool = False,
     show_air_quality: bool = False,
+    show_historical: bool = False,
     show_all: bool = False,
     export_format: str | None = None,
     export_output: str | None = None,
@@ -122,6 +117,20 @@ def execute_city_query(
             if show_hourly and extended.hourly:
                 render_24h_hourly(extended.hourly)
 
+        # Se solicitado histórico climático
+        if show_historical:
+            hist_client = HistoricalWeatherClient()
+            hist_analysis = hist_client.get_historical_analysis(
+                capital=capital,
+                country_name=country.name_pt,
+                latitude=lat,
+                longitude=lon,
+                current_temp=extended.current.temperature,
+                timezone=tz,
+            )
+            if hist_analysis:
+                render_historical_analysis(hist_analysis)
+
         # Exportação se requisitada
         if export_format:
             out_file = export_output or f"{capital.lower().replace(' ', '_')}_clima.{export_format}"
@@ -162,6 +171,19 @@ def execute_city_query(
         storage.add_history_entry(query, match_res, weather)
         render_current_weather(match_res, weather)
 
+        if show_historical:
+            hist_client = HistoricalWeatherClient()
+            hist_analysis = hist_client.get_historical_analysis(
+                capital=capital,
+                country_name=country.name_pt,
+                latitude=lat,
+                longitude=lon,
+                current_temp=weather.temperature,
+                timezone=tz,
+            )
+            if hist_analysis:
+                render_historical_analysis(hist_analysis)
+
     return True
 
 
@@ -176,25 +198,27 @@ def interactive_menu(matcher: CityMatcher, meteo_client: OpenMeteoClient, storag
                     "[bold green]1.[/] Consultar Clima Atual de uma Capital/País\n"
                     "[bold green]2.[/] Consultar Previsão Completa (Atual + 5 Dias + Qualidade do Ar)\n"
                     "[bold green]3.[/] Previsão Horária (Próximas 24 Horas)\n"
-                    "[bold green]4.[/] Comparar Clima entre Múltiplas Capitais\n"
-                    "[bold green]5.[/] Minhas Capitais Favoritas ⭐\n"
-                    "[bold green]6.[/] Adicionar / Remover Capital dos Favoritos\n"
-                    "[bold green]7.[/] Histórico de Consultas Recentes 📜\n"
+                    "[bold green]4.[/] Análise Histórica e Anomalia Climática (10 Anos) 📊\n"
+                    "[bold green]5.[/] Comparar Clima entre Múltiplas Capitais ⚖️\n"
+                    "[bold green]6.[/] Minhas Capitais Favoritas ⭐\n"
+                    "[bold green]7.[/] Adicionar / Remover Capital dos Favoritos\n"
+                    "[bold green]8.[/] Histórico de Consultas Recentes 📜\n"
                     "[bold red]0.[/] Sair",
                     border_style="cyan",
                     title="Menu Principal",
                 )
             )
-            opt = Prompt.ask("[bold yellow]Escolha uma opção[/bold yellow]", choices=["0", "1", "2", "3", "4", "5", "6", "7"], default="1")
+            opt = Prompt.ask("[bold yellow]Escolha uma opção[/bold yellow]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8"], default="1")
         else:
             print("\n=== DASHBOARD DE CLIMA DE CAPITAIS MUNDIAIS ===")
             print("1. Consultar Clima Atual")
             print("2. Consultar Previsão Completa (5 Dias + Qualidade do Ar)")
             print("3. Previsão Horária (24h)")
-            print("4. Comparar Capitais")
-            print("5. Minhas Capitais Favoritas")
-            print("6. Adicionar/Remover Favorito")
-            print("7. Histórico de Consultas")
+            print("4. Análise Histórica e Anomalias Climáticas")
+            print("5. Comparar Capitais")
+            print("6. Minhas Capitais Favoritas")
+            print("7. Adicionar/Remover Favorito")
+            print("8. Histórico de Consultas")
             print("0. Sair")
             opt = input("Escolha uma opção [1]: ").strip() or "1"
 
@@ -221,52 +245,50 @@ def interactive_menu(matcher: CityMatcher, meteo_client: OpenMeteoClient, storag
                 execute_city_query(q, matcher, meteo_client, storage, show_hourly=True)
 
         elif opt == "4":
-            raw_cities = input("\nDigite os nomes das capitais separados por vírgula (ex: Brasília, Tóquio, Roma): ").strip()
-            cities = [c.strip() for c in raw_cities.split(",") if c.strip()]
-            if len(cities) >= 2:
-                if HAS_RICH and console:
-                    console.print(f"\n[dim]Comparando {len(cities)} cidades...[/dim]")
-                comp = compare_cities(cities, matcher, meteo_client)
-                render_comparison_matrix(comp)
-            else:
-                if HAS_RICH and console:
-                    console.print("[yellow]Por favor, informe ao menos 2 cidades para comparar.[/yellow]")
-                else:
-                    print("Por favor, informe ao menos 2 cidades para comparar.")
+            q = input("\nDigite o nome da capital, país ou código ISO para análise histórica: ").strip()
+            if q:
+                execute_city_query(q, matcher, meteo_client, storage, show_historical=True)
 
         elif opt == "5":
-            render_favorites(storage.get_favorites())
+            c_input = input("\nDigite as capitais separadas por espaço (ex: Brasília Tóquio Paris): ").strip()
+            if c_input:
+                cities = c_input.split()
+                if len(cities) < 2:
+                    print("Informe ao menos duas capitais para comparar.")
+                else:
+                    comp_res = compare_cities(cities, matcher, meteo_client)
+                    render_comparison(comp_res)
 
         elif opt == "6":
-            q = input("\nDigite o nome da capital a favoritar/desfavoritar: ").strip()
+            favs = storage.get_favorites()
+            render_favorites(favs)
+
+        elif opt == "7":
+            q = input("\nDigite o nome da capital para alternar favorito: ").strip()
             if q:
                 match_res = matcher.match(q)
                 if match_res:
                     added = storage.toggle_favorite(
-                        match_res.capital,
-                        match_res.country.cca2,
-                        match_res.country.name_pt,
-                        match_res.country.flag_emoji,
+                        capital=match_res.capital,
+                        cca2=match_res.country.cca2,
+                        country_name=match_res.country.name_pt,
+                        flag=match_res.country.flag_emoji,
                     )
                     status_str = "adicionada aos favoritos ⭐" if added else "removida dos favoritos ❌"
-                    if HAS_RICH and console:
-                        console.print(f"[bold green]{match_res.capital} foi {status_str}![/bold green]")
-                    else:
-                        print(f"{match_res.capital} foi {status_str}!")
+                    print(f"\n{match_res.country.flag_emoji} {match_res.capital} ({match_res.country.name_pt}) foi {status_str}!")
                 else:
-                    if HAS_RICH and console:
-                        console.print(f"[bold red]Cidade '{q}' não encontrada.[/bold red]")
-                    else:
-                        print(f"Cidade '{q}' não encontrada.")
+                    print(f"Capital '{q}' não encontrada.")
 
-        elif opt == "7":
-            render_history(storage.get_history(limit=15))
+        elif opt == "8":
+            hist = storage.get_history(limit=15)
+            render_history(hist)
 
 
 def main() -> None:
-    """Função principal de inicialização da CLI."""
+    """Função principal da CLI."""
     parser = argparse.ArgumentParser(
-        description="Dashboard e CLI de Clima para Capitais Mundiais com previsões estendidas e comparador."
+        prog="clima",
+        description="Dashboard e CLI de Clima para Capitais Mundiais com previsões estendidas e comparador.",
     )
     parser.add_argument(
         "query",
@@ -288,6 +310,11 @@ def main() -> None:
         "-a", "--air-quality",
         action="store_true",
         help="Exibe dados detalhados de qualidade do ar (AQI, PM2.5, PM10)",
+    )
+    parser.add_argument(
+        "--historical",
+        action="store_true",
+        help="Exibe análise histórica comparativa de 10 anos e anomalia climática",
     )
     parser.add_argument(
         "--all",
@@ -361,26 +388,42 @@ def main() -> None:
         return
 
     if args.compare:
-        comp = compare_cities(args.compare, matcher, meteo_client)
-        render_comparison_matrix(comp)
+        comparison_res = compare_cities(args.compare, matcher, meteo_client)
+        render_comparison(comparison_res)
         if args.export:
             out_file = args.output or f"comparacao_clima.{args.export}"
             if args.export == "json":
-                out_path = export_report_json(comp.to_summary_dict(), out_file)
+                out_path = export_report_json(comparison_res.to_summary_dict(), out_file)
             else:
-                out_path = export_report_csv(comp.to_summary_dict()["cities_compared"], out_file)
-            print(f" Comparação exportada com sucesso para: {out_path}")
+                rows = [
+                    {
+                        "capital": item.capital,
+                        "country": item.country_name,
+                        "cca2": item.cca2,
+                        "temperature": item.temperature,
+                        "apparent_temperature": item.apparent_temperature,
+                        "condition": item.condition,
+                        "humidity": item.humidity,
+                        "wind_speed": item.wind_speed,
+                        "precipitation": item.precipitation,
+                    }
+                    for item in comparison_res.items
+                ]
+                out_path = export_report_csv(rows, out_file)
+            print(f"Comparação exportada para: {out_path}")
         return
 
+    # Consulta direta por query
     if args.query:
         execute_city_query(
-            args.query,
-            matcher,
-            meteo_client,
-            storage,
+            query=args.query,
+            matcher=matcher,
+            meteo_client=meteo_client,
+            storage=storage,
             show_forecast=args.forecast,
             show_hourly=args.hourly,
             show_air_quality=args.air_quality,
+            show_historical=args.historical,
             show_all=args.all,
             export_format=args.export,
             export_output=args.output,

@@ -315,3 +315,49 @@ def render_history(history: list[dict]) -> None:
         print("\n--- Histórico de Consultas ---")
         for h in history:
             print(f"{h.get('timestamp')}: {h.get('capital')} ({h.get('country_name')}) - {h.get('temperature')}°C {h.get('condition')}")
+
+
+def render_historical_analysis(analysis: Any) -> None:
+    """Exibe o card de análise histórica e anomalia climática."""
+    if HAS_RICH and console:
+        table = Table.grid(padding=(0, 2))
+        table.add_column("Chave", style="bold cyan")
+        table.add_column("Valor", style="white")
+
+        anomaly_color = (
+            "red" if analysis.temp_anomaly >= 3.0
+            else "yellow" if analysis.temp_anomaly >= 1.0
+            else "green" if analysis.temp_anomaly > -1.0
+            else "cyan" if analysis.temp_anomaly > -3.0
+            else "blue"
+        )
+
+        table.add_row("Data de Referência:", f"{analysis.target_date}")
+        table.add_row("Período Analisado:", f"Últimos {analysis.years_analyzed} anos (mesmo dia/mês)")
+        table.add_row("Temperatura Atual:", f"{analysis.current_temp:.1f} °C")
+        table.add_row("Média Histórica:", f"{analysis.historical_mean_temp:.1f} °C")
+        table.add_row("Recorde Histórico (Máx):", f"{analysis.historical_max_temp:.1f} °C")
+        table.add_row("Recorde Histórico (Mín):", f"{analysis.historical_min_temp:.1f} °C")
+        table.add_row(
+            "Anomalia Térmica:",
+            f"[{anomaly_color}]{analysis.anomaly_emoji} {analysis.temp_anomaly:+.1f} °C — {analysis.anomaly_status}[/{anomaly_color}]",
+        )
+        table.add_row("Precipitação Média Histórica:", f"{analysis.historical_avg_precip:.1f} mm")
+
+        panel = Panel(
+            table,
+            title=f"📊 Análise Histórica & Anomalia Climática — {analysis.capital} ({analysis.country_name})",
+            border_style=anomaly_color,
+            expand=False,
+        )
+        console.print(panel)
+    else:
+        print(f"\n--- Análise Histórica: {analysis.capital} ({analysis.country_name}) ---")
+        print(f"Data: {analysis.target_date} (base: {analysis.years_analyzed} anos)")
+        print(f"Temperatura Atual: {analysis.current_temp:.1f} °C | Média Histórica: {analysis.historical_mean_temp:.1f} °C")
+        print(f"Anomalia: {analysis.anomaly_emoji} {analysis.temp_anomaly:+.1f} °C ({analysis.anomaly_status})")
+        print(f"Extremos: Mín {analysis.historical_min_temp:.1f} °C / Máx {analysis.historical_max_temp:.1f} °C")
+        print(f"Chuva Média Histórica: {analysis.historical_avg_precip:.1f} mm\n")
+
+# Alias de compatibilidade
+render_comparison = render_comparison_matrix

@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clima Países — Dashboard de Capitais Mundiais</title>
+  <title>Clima Países — Dashboard, Radar & Análise Histórica</title>
+  
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -17,10 +19,16 @@
       }
     }
   </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     body { font-family: 'Inter', sans-serif; }
     .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    #map { z-index: 10; min-height: 320px; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
@@ -32,12 +40,12 @@
         <span class="text-3xl">🌤️</span>
         <div>
           <h1 class="font-bold text-lg text-white leading-tight">Clima Países</h1>
-          <p class="text-xs text-slate-400">Capitais Mundiais • Open-Meteo & REST Countries</p>
+          <p class="text-xs text-slate-400">Capitais Mundiais • Open-Meteo & Radar RainViewer</p>
         </div>
       </div>
       <div class="flex items-center space-x-3">
         <a href="/docs" target="_blank" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1.5 border border-slate-700">
-          <span>⚡ API Docs</span>
+          <span>⚡ Swagger Docs</span>
         </a>
       </div>
     </div>
@@ -142,6 +150,34 @@
         </div>
       </div>
 
+      <!-- Radar Meteorológico & Mapa Interativo -->
+      <div class="glass rounded-3xl p-6 border border-slate-800 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h4 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>🛰️</span>
+            <span>Radar Meteorológico & Precipitação em Tempo Real</span>
+          </h4>
+          <div class="flex items-center gap-2">
+            <button id="playRadarBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 font-semibold transition">
+              ▶️ Animação Radar
+            </button>
+            <span id="radarTimestamp" class="text-xs text-slate-400">Tempo real</span>
+          </div>
+        </div>
+        <div id="map" class="w-full rounded-2xl border border-slate-800 shadow-inner overflow-hidden"></div>
+      </div>
+
+      <!-- Historical Anomaly Card -->
+      <div id="historicalCard" class="glass rounded-3xl p-6 border border-slate-800 shadow-xl hidden">
+        <h4 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
+          <span>📊</span>
+          <span>Análise Histórica & Anomalia Climática (Últimos 10 Anos)</span>
+        </h4>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="historicalGrid">
+          <!-- Preenchido dinamicamente via JS -->
+        </div>
+      </div>
+
       <!-- Air Quality Card -->
       <div id="aqiCard" class="glass rounded-3xl p-6 border border-slate-800 shadow-xl">
         <h4 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
@@ -149,7 +185,7 @@
           <span>Qualidade do Ar (European AQI)</span>
         </h4>
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="aqiGrid">
-          <!-- Dinâmico via JS -->
+          <!-- Preenchido dinamicamente via JS -->
         </div>
       </div>
 
@@ -170,7 +206,7 @@
 
   <!-- Footer -->
   <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500 bg-slate-950">
-    <p>Clima Países • Dados fornecidos por <a href="https://open-meteo.com" target="_blank" class="underline hover:text-slate-300">Open-Meteo</a> e <a href="https://restcountries.com" target="_blank" class="underline hover:text-slate-300">REST Countries</a></p>
+    <p>Clima Países • Dados meteorológicos fornecidos por <a href="https://open-meteo.com" target="_blank" class="underline hover:text-slate-300">Open-Meteo</a>, <a href="https://rainviewer.com" target="_blank" class="underline hover:text-slate-300">RainViewer</a> e <a href="https://restcountries.com" target="_blank" class="underline hover:text-slate-300">REST Countries</a></p>
   </footer>
 
   <script>
@@ -180,6 +216,83 @@
     const errorAlert = document.getElementById('errorAlert');
     const errorMessage = document.getElementById('errorMessage');
     const weatherContent = document.getElementById('weatherContent');
+
+    // Inicialização do Mapa Leaflet
+    let map = null;
+    let marker = null;
+    let radarLayers = [];
+    let currentRadarIndex = 0;
+    let radarInterval = null;
+
+    function initMap(lat, lon, cityName) {
+      if (!window.L) return;
+      if (!map) {
+        map = L.map('map').setView([lat, lon], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap',
+          maxZoom: 18,
+        }).addTo(map);
+      } else {
+        map.setView([lat, lon], 7);
+      }
+
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lon]).addTo(map).bindPopup(`<b>${cityName}</b>`).openPopup();
+      loadRadarLayers();
+    }
+
+    async function loadRadarLayers() {
+      try {
+        const res = await fetch('/api/radar/layers');
+        if (!res.ok) return;
+        const data = await res.json();
+        const host = data.host || 'https://tilecache.rainviewer.com';
+        const frames = (data.radar && data.radar.past) ? data.radar.past : [];
+
+        // Limpa camadas anteriores
+        radarLayers.forEach(l => map.removeLayer(l));
+        radarLayers = [];
+
+        frames.forEach(frame => {
+          const layer = L.tileLayer(`${host}${frame.path}`, {
+            tileSize: 256,
+            opacity: 0.6,
+            zIndex: 100,
+          });
+          radarLayers.push({ layer, time: frame.time });
+        });
+
+        if (radarLayers.length > 0) {
+          radarLayers[radarLayers.length - 1].layer.addTo(map);
+          currentRadarIndex = radarLayers.length - 1;
+          updateRadarLabel(radarLayers[currentRadarIndex].time);
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar radar:', e);
+      }
+    }
+
+    function updateRadarLabel(timestamp) {
+      const dt = new Date(timestamp * 1000);
+      document.getElementById('radarTimestamp').innerText = `Radar: ${dt.toLocaleTimeString()}`;
+    }
+
+    document.getElementById('playRadarBtn').addEventListener('click', () => {
+      if (radarInterval) {
+        clearInterval(radarInterval);
+        radarInterval = null;
+        document.getElementById('playRadarBtn').innerText = '▶️ Animação Radar';
+      } else {
+        if (radarLayers.length === 0) return;
+        document.getElementById('playRadarBtn').innerText = '⏸️ Pausar';
+        radarInterval = setInterval(() => {
+          map.removeLayer(radarLayers[currentRadarIndex].layer);
+          currentRadarIndex = (currentRadarIndex + 1) % radarLayers.length;
+          radarLayers[currentRadarIndex].layer.addTo(map);
+          updateRadarLabel(radarLayers[currentRadarIndex].time);
+        }, 800);
+      }
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -204,12 +317,49 @@
         }
         const data = await res.json();
         renderData(data);
+        fetchHistorical(query);
       } catch (err) {
         weatherContent.classList.add('hidden');
         errorMessage.innerText = err.message;
         errorAlert.classList.remove('hidden');
       } finally {
         spinner.classList.add('hidden');
+      }
+    }
+
+    async function fetchHistorical(query) {
+      const histCard = document.getElementById('historicalCard');
+      const histGrid = document.getElementById('historicalGrid');
+      try {
+        const res = await fetch(`/api/historical/${encodeURIComponent(query)}`);
+        if (!res.ok) {
+          histCard.classList.add('hidden');
+          return;
+        }
+        const h = await res.json();
+        histGrid.innerHTML = `
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+            <span class="text-xs text-slate-400 block mb-1">Média Histórica</span>
+            <span class="text-lg font-bold text-slate-200">${h.historical_mean_temp.toFixed(1)}°C</span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+            <span class="text-xs text-slate-400 block mb-1">Anomalia Térmica</span>
+            <span class="text-lg font-bold text-amber-400">${h.anomaly_emoji} ${h.temp_anomaly > 0 ? '+' : ''}${h.temp_anomaly.toFixed(1)}°C</span>
+            <span class="text-[11px] text-slate-400 block mt-0.5">${h.anomaly_status}</span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+            <span class="text-xs text-slate-400 block mb-1">Recorde Histórico</span>
+            <span class="text-sm font-semibold text-slate-300">Máx: <span class="text-red-400 font-bold">${h.historical_max_temp.toFixed(1)}°</span></span><br/>
+            <span class="text-sm font-semibold text-slate-300">Mín: <span class="text-blue-400 font-bold">${h.historical_min_temp.toFixed(1)}°</span></span>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+            <span class="text-xs text-slate-400 block mb-1">Chuva Média</span>
+            <span class="text-lg font-bold text-cyan-400">${h.historical_avg_precip.toFixed(1)} mm</span>
+          </div>
+        `;
+        histCard.classList.remove('hidden');
+      } catch (e) {
+        histCard.classList.add('hidden');
       }
     }
 
@@ -282,6 +432,7 @@
       });
 
       weatherContent.classList.remove('hidden');
+      initMap(w.latitude, w.longitude, data.capital);
     }
 
     // Carrega busca padrão ao iniciar

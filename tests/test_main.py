@@ -155,3 +155,31 @@ def test_execute_city_query_not_found(tmp_path):
     mock_meteo = MagicMock()
 
     assert execute_city_query("cidade_inexistente", mock_matcher, mock_meteo, storage) is False
+
+
+def test_main_historical_flag(capsys):
+    from unittest.mock import MagicMock, patch
+    from src.main import main
+    from src.api.historical import HistoricalAnalysis
+
+    analysis = HistoricalAnalysis(
+        capital="Brasília",
+        country_name="Brasil",
+        target_date="2026-08-27",
+        years_analyzed=10,
+        current_temp=28.0,
+        historical_mean_temp=23.5,
+        historical_max_temp=31.0,
+        historical_min_temp=17.0,
+        temp_anomaly=4.5,
+        anomaly_status="Muito acima da média histórica",
+        anomaly_emoji="🔥",
+        historical_avg_precip=0.2,
+    )
+
+    with patch("sys.argv", ["clima", "Brasília", "--historical"]), \
+         patch("src.api.historical.HistoricalWeatherClient.get_historical_analysis", return_value=analysis):
+        main()
+
+    captured = capsys.readouterr()
+    assert "Brasília" in captured.out or "Análise Histórica" in captured.out

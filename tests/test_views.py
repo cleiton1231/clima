@@ -121,3 +121,25 @@ def test_views_render_without_errors():
     render_favorites([])
     render_history([{"timestamp": "2026-08-27", "query": "Paris", "capital": "Paris", "country_name": "França", "temperature": 24.0, "emoji": "☀️", "condition": "Céu limpo"}])
     render_history([])
+
+
+def test_render_historical_analysis_no_crash():
+    from src.api.historical import HistoricalAnalysis
+    from src.ui.views import render_historical_analysis
+
+    analysis = HistoricalAnalysis(
+        capital="Brasília",
+        country_name="Brasil",
+        target_date="2026-08-27",
+        years_analyzed=10,
+        current_temp=28.0,
+        historical_mean_temp=23.5,
+        historical_max_temp=31.0,
+        historical_min_temp=17.0,
+        temp_anomaly=4.5,
+        anomaly_status="Muito acima da média histórica",
+        anomaly_emoji="🔥",
+        historical_avg_precip=0.2,
+    )
+    # Deve renderizar sem erro
+    render_historical_analysis(analysis)

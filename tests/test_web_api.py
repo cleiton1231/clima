@@ -200,3 +200,65 @@ def test_api_favorites_and_history(client, mock_country_and_weather):
         res_hist = client.get("/api/history")
         assert res_hist.status_code == 200
         assert isinstance(res_hist.json(), list)
+
+
+def test_api_historical_success(client, mock_country_and_weather):
+    match_res, weather, _ = mock_country_and_weather
+    from src.api.historical import HistoricalAnalysis
+
+    analysis = HistoricalAnalysis(
+        capital="Brasília",
+        country_name="Brasil",
+        target_date="2026-08-27",
+        years_analyzed=10,
+        current_temp=28.0,
+        historical_mean_temp=23.5,
+        historical_max_temp=31.0,
+        historical_min_temp=17.0,
+        temp_anomaly=4.5,
+        anomaly_status="Muito acima da média histórica",
+        anomaly_emoji="🔥",
+        historical_avg_precip=0.2,
+    )
+
+    with patch("src.web.app.matcher.match", return_value=match_res), \
+         patch("src.web.app.meteo_client.get_coordinates", return_value=(-15.78, -47.93, "Brasília", "America/Sao_Paulo")), \
+         patch("src.web.app.meteo_client.get_current_weather", return_value=weather), \
+         patch("src.web.app.hist_client.get_historical_analysis", return_value=analysis):
+
+        response = client.get("/api/historical/Brasilia")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["capital"] == "Brasília"
+        assert data["temp_anomaly"] == 4.5
+        assert data["anomaly_emoji"] == "🔥"
+
+
+def test_api_historical_not_found(client):
+    with patch("src.web.app.matcher.match", return_value=None):
+        response = client.get("/api/historical/cidade_inexistente")
+        assert response.status_code == 404
+
+
+def test_api_radar_layers_success(client):
+    mock_rainviewer_data = {
+        "version": "1.0",
+        "generated": 1724774400,
+        "host": "https://tilecache.rainviewer.com",
+        "radar": {
+            "past": [{"time": 1724773800, "path": "/v2/radar/1724773800/256/{z}/{x}/{y}/2/1_1.png"}],
+            "nowcast": [{"time": 1724775000, "path": "/v2/radar/1724775000/256/{z}/{x}/{y}/2/1_1.png"}]
+        }
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = mock_rainviewer_data
+
+    with patch("requests.get", return_value=mock_resp):
+        response = client.get("/api/radar/layers")
+        assert response.status_code == 200
+        data = response.json()
+        assert "host" in data
+        assert "radar" in data
+        assert len(data["radar"]["past"]) == 1

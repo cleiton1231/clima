@@ -3,35 +3,41 @@
 Responsabilidade:
 - Expor endpoints REST documentados via Swagger OpenAPI (/docs).
 - Servir a interface web estática (Dashboard SPA).
+- Prover rotas de meteorologia, histórico de 10 anos, qualidade do ar e radar de precipitação.
 - Executar operações de domínio em funções síncronas convencionais (def),
   permitindo ao FastAPI fazer o offload automático no threadpool sem travar o event loop.
 """
 
 from __future__ import annotations
 
-import os
+import logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
+import requests
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.api.historical import HistoricalWeatherClient
 from src.api.open_meteo import OpenMeteoClient
 from src.api.rest_countries import RestCountriesClient
 from src.comparator import compare_cities
 from src.match import CityMatcher
 from src.storage import StorageManager
 
+logger = logging.getLogger(__name__)
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 INDEX_HTML = STATIC_DIR / "index.html"
+RAINVIEWER_MAPS_URL = "https://api.rainviewer.com/public/weather-maps.json"
 
 app = FastAPI(
     title="Clima Países API",
-    description="API REST para dados meteorológicos, previsões estendidas e comparador de capitais mundiais.",
-    version="1.0.0",
+    description="API REST para dados meteorológicos, previsões estendidas, histórico de 10 anos e radar de capitais mundiais.",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -50,6 +56,7 @@ countries_client = RestCountriesClient()
 countries = countries_client.load_countries()
 matcher = CityMatcher(countries)
 meteo_client = OpenMeteoClient()
+hist_client = HistoricalWeatherClient()
 storage = StorageManager()
 
 # Monta diretório estático
@@ -150,6 +157,64 @@ def get_forecast(query: str, days: int = Query(default=5, ge=1, le=7)) -> dict[s
         "hourly": [asdict(h) for h in extended.hourly],
         "air_quality": asdict(extended.air_quality) if extended.air_quality else None,
     }
+
+
+@app.get("/api/historical/{query}", tags=["Análise Histórica"])
+def get_historical(query: str, years: int = Query(default=10, ge=1, le=20)) -> dict[str, Any]:
+    """Consulta análise histórica e anomalia climática dos últimos 10 a 20 anos na mesma data."""
+    match_res = matcher.match(query)
+    if not match_res:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Capital ou país não encontrada para '{query}'.",
+        )
+
+    capital = match_res.capital
+    country = match_res.country
+    lat, lon, tz = _resolve_coordinates(capital, country.cca2, country.latlng)
+
+    weather = meteo_client.get_current_weather(lat, lon, timezone=tz)
+    if not weather:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Não foi possível obter a temperatura atual para {capital}.",
+        )
+
+    analysis = hist_client.get_historical_analysis(
+        capital=capital,
+        country_name=country.name_pt,
+        latitude=lat,
+        longitude=lon,
+        current_temp=weather.temperature,
+        years_back=years,
+        timezone=tz,
+    )
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Registros históricos indisponíveis para {capital}.",
+        )
+
+    return asdict(analysis)
+
+
+@app.get("/api/radar/layers", tags=["Radar Meteorológico"])
+def get_radar_layers() -> dict[str, Any]:
+    """Retorna os metadados e timestamps das camadas públicas de radar de precipitação (RainViewer API)."""
+    try:
+        resp = requests.get(RAINVIEWER_MAPS_URL, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço de radar meteorológico temporariamente indisponível.",
+        )
+    except requests.RequestException as e:
+        logger.warning(f"Erro ao consultar RainViewer API: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conectar ao serviço de radar.",
+        )
 
 
 @app.get("/api/air-quality/{query}", tags=["Qualidade do Ar"])
