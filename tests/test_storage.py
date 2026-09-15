@@ -113,3 +113,22 @@ def test_storage_custom_env_var(tmp_path, monkeypatch):
     storage = StorageManager()
     assert storage.file_path == custom_file
     assert custom_file.exists()
+
+
+def test_history_escrita_concorrente_sem_perda(tmp_path, sample_match_and_weather):
+    from concurrent.futures import ThreadPoolExecutor
+
+    match_res, weather = sample_match_and_weather
+    storage = StorageManager(tmp_path / "concurrent.json")
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        list(
+            pool.map(
+                lambda i: storage.add_history_entry(f"query{i}", match_res, weather),
+                range(10),
+            )
+        )
+
+    history = storage.get_history(limit=50)
+    assert len(history) == 10
+    assert {h["query"] for h in history} == {f"query{i}" for i in range(10)}
