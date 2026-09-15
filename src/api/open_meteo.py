@@ -101,6 +101,18 @@ class WeatherData:
 
 
 @dataclass
+class PlaceHit:
+    """Resultado do fallback de geocoding para cidades não-capitais."""
+
+    name: str
+    latitude: float
+    longitude: float
+    timezone: str
+    country: str
+    country_code: str
+
+
+@dataclass
 class DailyForecast:
     """Previsão diária resumida."""
 
@@ -197,6 +209,33 @@ class OpenMeteoClient:
         except requests.RequestException as e:
             logger.warning(f"Erro ao buscar coordenadas para '{city}': {e}")
 
+        return None
+
+    def search_place(self, city: str) -> PlaceHit | None:
+        """Busca qualquer cidade (não apenas capitais) via Geocoding API."""
+        if not city:
+            return None
+        params: dict[str, Any] = {"name": city, "count": 1, "language": "pt", "format": "json"}
+        try:
+            response = requests.get(
+                OPEN_METEO_GEOCODING_URL,
+                params=params,
+                timeout=self.timeout,
+            )
+            if response.status_code == 200:
+                results = response.json().get("results") or []
+                if results:
+                    best = results[0]
+                    return PlaceHit(
+                        name=str(best.get("name", city)),
+                        latitude=float(best.get("latitude", 0.0)),
+                        longitude=float(best.get("longitude", 0.0)),
+                        timezone=str(best.get("timezone", "UTC")),
+                        country=str(best.get("country", "")),
+                        country_code=str(best.get("country_code", "")).upper(),
+                    )
+        except requests.RequestException as e:
+            logger.warning(f"Erro no fallback de geocoding para '{city}': {e}")
         return None
 
     def get_current_weather(
