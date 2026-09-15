@@ -13,6 +13,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.alerts import build_alerts
 from src.api.historical import HistoricalWeatherClient
 from src.api.open_meteo import OpenMeteoClient
 from src.api.rest_countries import RestCountriesClient
@@ -30,6 +31,7 @@ from src.ui.views import (
     render_favorites,
     render_historical_analysis,
     render_history,
+    render_alerts,
 )
 
 try:
@@ -117,6 +119,11 @@ def execute_city_query(
                 render_5day_forecast(extended.daily)
             if show_hourly and extended.hourly:
                 render_24h_hourly(extended.hourly)
+
+        # Alertas climáticos derivados dos dados estendidos
+        alerts = build_alerts(extended)
+        if alerts:
+            render_alerts(alerts)
 
         # Se solicitado histórico climático
         if show_historical:

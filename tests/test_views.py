@@ -143,3 +143,17 @@ def test_render_historical_analysis_no_crash():
     )
     # Deve renderizar sem erro
     render_historical_analysis(analysis)
+
+
+def test_render_alerts_imprime_e_ignora_vazio(capsys):
+    from src.alerts import Alert
+    from src.ui.views import render_alerts
+
+    render_alerts([])  # vazio: no-op
+    assert capsys.readouterr().out.strip() == ""
+
+    alerts = [Alert(level="alto", emoji="🌧️", title="🌧️ Risco alto de chuva", detail="2026-08-28")]
+    render_alerts(alerts)
+    out = capsys.readouterr().out
+    assert "⚠️" in out
+    assert "Risco alto de chuva" in out

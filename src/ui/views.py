@@ -22,6 +22,7 @@ except ImportError:
     HAS_RICH = False
 
 if TYPE_CHECKING:
+    from src.alerts import Alert
     from src.api.open_meteo import (
         AirQualityData,
         DailyForecast,
@@ -361,3 +362,31 @@ def render_historical_analysis(analysis: Any) -> None:
 
 # Alias de compatibilidade
 render_comparison = render_comparison_matrix
+
+
+def render_alerts(alerts: "list[Alert]") -> None:
+    """Exibe painel de alertas climáticos; no-op se não houver alertas."""
+    if not alerts:
+        return
+
+    if HAS_RICH and console:
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("Nível", style="bold")
+        table.add_column("Alerta", style="white")
+
+        level_emoji = {"critico": "🔴", "alto": "🟠", "atencao": "🟡"}
+        for a in alerts:
+            table.add_row(level_emoji.get(a.level, "•"), f"{a.emoji} {a.title} — {a.detail}")
+
+        console.print(
+            Panel(
+                table,
+                title="⚠️ [bold yellow]Alertas Climáticos[/bold yellow]",
+                border_style="yellow",
+                expand=False,
+            )
+        )
+    else:
+        print("\n--- Alertas Climáticos ---")
+        for a in alerts:
+            print(f"{a.emoji} {a.title} ({a.level}): {a.detail}")
