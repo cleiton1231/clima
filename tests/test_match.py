@@ -207,3 +207,25 @@ class TestInvalidAndEdgeCases:
     def test_invalid_queries_return_none_safely(self, matcher, invalid_query):
         result = matcher.match(invalid_query)
         assert result is None, f"Query '{invalid_query}' deveria retornar None sem exceção"
+
+
+class TestMatchingAmbiguidades:
+    """Casos de ambiguidade descobertos na simulação de 2026-09-15."""
+
+    def test_cingapura_nao_deve_cair_em_prefixo_curto(self, matcher):
+        # 'cin' (3 chars) não deve vencer por prefixo; fuzzy resolve Singapura
+        res = matcher.match("Cingapura")
+        assert res is not None
+        assert res.country.cca2 == "SG"
+
+    def test_salvador_resolve_cidade_brasileira(self, matcher):
+        res = matcher.match("Salvador")
+        assert res is not None
+        assert res.capital == "Salvador"
+        assert res.country.cca2 == "BR"
+
+    def test_san_salvador_e_el_salvador_continuam_bolivia_deles(self, matcher):
+        san = matcher.match("San Salvador")
+        assert san is not None and san.country.cca2 == "SV"
+        el = matcher.match("El Salvador")
+        assert el is not None and el.country.cca2 == "SV"

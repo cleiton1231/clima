@@ -225,7 +225,8 @@ class OpenMeteoClient:
             if response.status_code == 200:
                 results = response.json().get("results") or []
                 if results:
-                    best = results[0]
+                    # Prefere o resultado mais populoso (desempate mantém a ordem da API)
+                    best = max(results, key=lambda r: r.get("population") or 0)
                     return PlaceHit(
                         name=str(best.get("name", city)),
                         latitude=float(best.get("latitude", 0.0)),

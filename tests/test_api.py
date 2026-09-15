@@ -137,3 +137,69 @@ class TestRestCountriesClient:
         assert br.name_common == "Brazil"
         assert "Brasília" in br.capitals or "Brasilia" in br.capitals
         assert br.flag_emoji == "🇧🇷"
+
+
+class TestSearchPlaceFallback:
+    """Testes do search_place (fallback de geocoding para não-capitais)."""
+
+    @patch("requests.get")
+    def test_search_place_prefere_maior_populacao(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "name": "Nova Iorque",
+                    "latitude": -14.5,
+                    "longitude": -40.6,
+                    "timezone": "America/Bahia",
+                    "country": "Brazil",
+                    "country_code": "BR",
+                    "population": 5000,
+                },
+                {
+                    "name": "New York",
+                    "latitude": 40.71,
+                    "longitude": -74.01,
+                    "timezone": "America/New_York",
+                    "country": "United States",
+                    "country_code": "US",
+                    "population": 8336817,
+                },
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        client = OpenMeteoClient()
+        hit = client.search_place("Nova York")
+        assert hit is not None
+        assert hit.name == "New York"
+        assert hit.country_code == "US"
+
+    @patch("requests.get")
+    def test_search_place_sem_populacao_mantem_primeiro(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "name": "Fulano City",
+                    "latitude": 1.0,
+                    "longitude": 2.0,
+                    "country": "Land",
+                    "country_code": "LD",
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        client = OpenMeteoClient()
+        hit = client.search_place("Fulano City")
+        assert hit is not None
+        assert hit.name == "Fulano City"
+
+    @patch("requests.get")
+    def test_search_place_erro_de_rede(self, mock_get):
+        mock_get.side_effect = requests.RequestException("Timeout")
+        client = OpenMeteoClient()
+        assert client.search_place("Qualquer") is None

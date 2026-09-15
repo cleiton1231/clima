@@ -169,6 +169,8 @@ CAPITAL_ALIASES: dict[str, tuple[str, str]] = {
     "bissau": ("Bissau", "GW"),
     "sao tome": ("São Tomé", "ST"),
     "dili": ("Dili", "TL"),
+    # Cidades importantes que não são capitais (resolvidas via geocoding com o CCA2 do país)
+    "salvador": ("Salvador", "BR"),
 }
 
 # Aliases comuns de nomes de países (multilíngue / abreviações -> Código CCA2)
@@ -352,8 +354,13 @@ class CityMatcher:
         for term, (cap, country, mtype) in self._all_searchable_terms.items():
             if not cap:
                 continue
-            # Verifica se query é prefixo significativo (mínimo 4 caracteres)
-            if len(norm_query) >= 4 and (term.startswith(norm_query) or norm_query.startswith(term)):
+            # Prefixo exige tamanho mínimo em AMBOS os lados (evita termos curtos
+            # indexados, como 'cin', sequestrando queries longas)
+            if (
+                len(norm_query) >= 4
+                and len(term) >= 4
+                and (term.startswith(norm_query) or norm_query.startswith(term))
+            ):
                 return MatchResult(
                     capital=cap,
                     country=country,
