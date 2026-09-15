@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clima-paises"
-version = "1.0.0"
+version = "1.1.0"
 description = "Dashboard que mostra o clima atual de capitais do mundo cruzando Open-Meteo e REST Countries."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,7 +14,6 @@ dependencies = [
     "rapidfuzz>=3.0.0",
     "fastapi>=0.110.0",
     "uvicorn>=0.28.0",
-    "aiofiles>=23.2.0",
 ]
 
 [project.optional-dependencies]
