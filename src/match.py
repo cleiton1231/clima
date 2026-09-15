@@ -171,6 +171,9 @@ CAPITAL_ALIASES: dict[str, tuple[str, str]] = {
     "dili": ("Dili", "TL"),
     # Cidades importantes que não são capitais (resolvidas via geocoding com o CCA2 do país)
     "salvador": ("Salvador", "BR"),
+    "nova york": ("New York", "US"),
+    "new york": ("New York", "US"),
+    "manaus": ("Manaus", "BR"),
 }
 
 # Aliases comuns de nomes de países (multilíngue / abreviações -> Código CCA2)

@@ -229,3 +229,24 @@ class TestMatchingAmbiguidades:
         assert san is not None and san.country.cca2 == "SV"
         el = matcher.match("El Salvador")
         assert el is not None and el.country.cca2 == "SV"
+
+
+class TestMatchingCidadesGrandesNaoCapitais:
+    """Não-capitais de grande porte que fuzzy/sequestradores pegavam errado."""
+
+    def test_nova_york_resolve_eua(self, matcher):
+        res = matcher.match("Nova York")
+        assert res is not None
+        assert res.capital == "New York"
+        assert res.country.cca2 == "US"
+
+    def test_manaus_resolve_brasil(self, matcher):
+        res = matcher.match("Manaus")
+        assert res is not None
+        assert res.capital == "Manaus"
+        assert res.country.cca2 == "BR"
+
+    def test_managua_continua_nicaragua(self, matcher):
+        res = matcher.match("Manágua")
+        assert res is not None
+        assert res.country.cca2 == "NI"
