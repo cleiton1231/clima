@@ -131,7 +131,8 @@ def test_api_weather_success(client, mock_country_and_weather):
 
 
 def test_api_weather_not_found(client):
-    with patch("src.web.app.matcher.match", return_value=None):
+    with patch("src.web.app.matcher.match", return_value=None), \
+         patch("src.web.app.meteo_client.search_place", return_value=None):
         response = client.get("/api/weather/cidade_que_nao_existe")
         assert response.status_code == 404
         assert "não encontrada" in response.json().get("detail", "").lower()
@@ -235,7 +236,8 @@ def test_api_historical_success(client, mock_country_and_weather):
 
 
 def test_api_historical_not_found(client):
-    with patch("src.web.app.matcher.match", return_value=None):
+    with patch("src.web.app.matcher.match", return_value=None), \
+         patch("src.web.app.meteo_client.search_place", return_value=None):
         response = client.get("/api/historical/cidade_inexistente")
         assert response.status_code == 404
 
@@ -272,3 +274,40 @@ def test_cors_preflight_sem_credentials(client):
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-origin") == "*"
     assert "access-control-allow-credentials" not in response.headers
+
+
+def test_api_weather_fallback_geocoding(client, mock_country_and_weather):
+    _, weather, _ = mock_country_and_weather
+    from src.api.open_meteo import PlaceHit
+
+    hit = PlaceHit(
+        name="São Paulo",
+        latitude=-23.5505,
+        longitude=-46.6333,
+        timezone="America/Sao_Paulo",
+        country="Brazil",
+        country_code="BR",
+    )
+
+    with patch("src.web.app.matcher.match", return_value=None), \
+         patch("src.web.app.meteo_client.search_place", return_value=hit), \
+         patch("src.web.app.meteo_client.get_current_weather", return_value=weather):
+
+        response = client.get("/api/weather/sao%20paulo")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["capital"] == "São Paulo"
+        assert data["match"]["type"] == "geocoding_fallback"
+
+
+def test_api_forecast_inclui_alertas(client, mock_country_and_weather):
+    match_res, _, extended = mock_country_and_weather
+
+    with patch("src.web.app.resolve_place", return_value=match_res), \
+         patch("src.web.app.meteo_client.get_extended_forecast", return_value=extended):
+
+        response = client.get("/api/forecast/Brasilia")
+        assert response.status_code == 200
+        alerts = response.json()["alerts"]
+        assert isinstance(alerts, list) and len(alerts) >= 1
+        assert "UV" in alerts[0]["title"]

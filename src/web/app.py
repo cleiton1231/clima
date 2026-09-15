@@ -21,11 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.alerts import build_alerts
 from src.api.historical import HistoricalWeatherClient
 from src.api.open_meteo import OpenMeteoClient
 from src.api.rest_countries import RestCountriesClient
 from src.comparator import compare_cities
 from src.match import CityMatcher
+from src.resolver import resolve_place
 from src.storage import StorageManager
 
 logger = logging.getLogger(__name__)
@@ -91,7 +93,7 @@ def read_root():
 @app.get("/api/weather/{query}", tags=["Meteorologia"])
 def get_weather(query: str) -> dict[str, Any]:
     """Consulta o clima atual de uma capital, país ou código ISO."""
-    match_res = matcher.match(query)
+    match_res = resolve_place(query, matcher, meteo_client)
     if not match_res:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -127,7 +129,7 @@ def get_weather(query: str) -> dict[str, Any]:
 @app.get("/api/forecast/{query}", tags=["Meteorologia"])
 def get_forecast(query: str, days: int = Query(default=5, ge=1, le=7)) -> dict[str, Any]:
     """Consulta a previsão estendida (clima atual, 5 dias, 24 horas e qualidade do ar)."""
-    match_res = matcher.match(query)
+    match_res = resolve_place(query, matcher, meteo_client)
     if not match_res:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -156,6 +158,7 @@ def get_forecast(query: str, days: int = Query(default=5, ge=1, le=7)) -> dict[s
         "daily": [asdict(d) for d in extended.daily],
         "hourly": [asdict(h) for h in extended.hourly],
         "air_quality": asdict(extended.air_quality) if extended.air_quality else None,
+        "alerts": [asdict(a) for a in build_alerts(extended)],
     }
 
 
@@ -220,7 +223,7 @@ def get_radar_layers() -> dict[str, Any]:
 @app.get("/api/air-quality/{query}", tags=["Qualidade do Ar"])
 def get_air_quality(query: str) -> dict[str, Any]:
     """Consulta os dados de qualidade do ar (AQI, PM2.5, PM10, NO2, O3) para uma capital."""
-    match_res = matcher.match(query)
+    match_res = resolve_place(query, matcher, meteo_client)
     if not match_res:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -275,7 +278,7 @@ def get_favorites() -> list[dict[str, Any]]:
 @app.post("/api/favorites/{query}", tags=["Favoritos"])
 def toggle_favorite(query: str) -> dict[str, Any]:
     """Adiciona ou remove uma capital dos favoritos."""
-    match_res = matcher.match(query)
+    match_res = resolve_place(query, matcher, meteo_client)
     if not match_res:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
