@@ -18,6 +18,7 @@ from src.api.open_meteo import OpenMeteoClient
 from src.api.rest_countries import RestCountriesClient
 from src.comparator import compare_cities
 from src.match import CityMatcher
+from src.resolver import resolve_place
 from src.storage import StorageManager, export_report_csv, export_report_json
 from src.ui.views import (
     render_24h_hourly,
@@ -65,7 +66,7 @@ def execute_city_query(
     else:
         print(f"\nBuscando: {query}...")
 
-    match_res = matcher.match(query)
+    match_res = resolve_place(query, matcher, meteo_client)
     if not match_res:
         msg = f"❌ Nenhuma capital ou país encontrado para '{query}'. Verifique o nome e tente novamente."
         if HAS_RICH and console:
@@ -266,7 +267,7 @@ def interactive_menu(matcher: CityMatcher, meteo_client: OpenMeteoClient, storag
         elif opt == "7":
             q = input("\nDigite o nome da capital para alternar favorito: ").strip()
             if q:
-                match_res = matcher.match(q)
+                match_res = resolve_place(q, matcher, meteo_client)
                 if match_res:
                     added = storage.toggle_favorite(
                         capital=match_res.capital,
@@ -373,7 +374,7 @@ def main() -> None:
         return
 
     if args.add_fav:
-        match_res = matcher.match(args.add_fav)
+        match_res = resolve_place(args.add_fav, matcher, meteo_client)
         if match_res:
             added = storage.toggle_favorite(
                 match_res.capital,

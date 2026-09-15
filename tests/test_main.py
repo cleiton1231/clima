@@ -153,6 +153,7 @@ def test_execute_city_query_not_found(tmp_path):
     mock_matcher = MagicMock()
     mock_matcher.match.return_value = None
     mock_meteo = MagicMock()
+    mock_meteo.search_place.return_value = None
 
     assert execute_city_query("cidade_inexistente", mock_matcher, mock_meteo, storage) is False
 
@@ -183,3 +184,44 @@ def test_main_historical_flag(capsys):
 
     captured = capsys.readouterr()
     assert "Brasília" in captured.out or "Análise Histórica" in captured.out
+
+
+def test_execute_city_query_fallback_geocoding(tmp_path):
+    storage = StorageManager(tmp_path / "hist.json")
+    from src.api.open_meteo import PlaceHit
+
+    mock_matcher = MagicMock()
+    mock_matcher.match.return_value = None
+    mock_meteo = MagicMock()
+    mock_meteo.search_place.return_value = PlaceHit(
+        name="São Paulo",
+        latitude=-23.5505,
+        longitude=-46.6333,
+        timezone="America/Sao_Paulo",
+        country="Brazil",
+        country_code="BR",
+    )
+    weather = WeatherData(
+        temperature=21.0,
+        apparent_temperature=20.5,
+        relative_humidity=70,
+        wind_speed=6.0,
+        precipitation=0.0,
+        weather_code=0,
+        weather_description="Céu limpo",
+        weather_emoji="☀️",
+        is_day=True,
+        time="2026-08-27T16:00",
+        latitude=-23.5505,
+        longitude=-46.6333,
+        elevation=760.0,
+        timezone="America/Sao_Paulo",
+    )
+    mock_meteo.get_current_weather.return_value = weather
+    mock_meteo.get_coordinates.return_value = (-23.5505, -46.6333, "São Paulo", "America/Sao_Paulo")
+
+    assert execute_city_query("sao paulo", mock_matcher, mock_meteo, storage) is True
+    history = storage.get_history()
+    assert len(history) == 1
+    assert history[0]["capital"] == "São Paulo"
+    assert history[0]["cca2"] == "BR"
