@@ -262,3 +262,13 @@ def test_api_radar_layers_success(client):
         assert "host" in data
         assert "radar" in data
         assert len(data["radar"]["past"]) == 1
+
+
+def test_cors_preflight_sem_credentials(client):
+    response = client.options(
+        "/api/weather/Brasilia",
+        headers={"Origin": "http://exemplo.com", "Access-Control-Request-Method": "GET"},
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "*"
+    assert "access-control-allow-credentials" not in response.headers

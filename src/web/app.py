@@ -42,11 +42,11 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configuração de CORS para permitir requisições de clientes web
+# CORS conforme spec: wildcard de origens só é válido sem credenciais
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
